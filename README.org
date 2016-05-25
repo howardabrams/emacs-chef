@@ -1,0 +1,18 @@
+#+TITLE:  Emacs to Chef Interface
+#+AUTHOR: Howard Abrams
+#+EMAIL:  howard.abrams@workday.com
+#+DATE:   2016 May 24
+#+TAGS:   chef emacs elisp technical
+
+Still unclear what we are actually building, so most of this is
+currently an experiment.
+
+* Dependencies
+
+  To play with this, currently, you will need:
+
+  - [[https://github.com/magnars/dash.el][Dash]] ... installed via MELPA
+  - Magnar's string library, [[https://github.com/magnars/s.el][Project S]]
+
+  We'll need something like the [[https://github.com/skeeto/emacs-rsa][Emacs RSA]] project, but we will
+  download and install that directly.

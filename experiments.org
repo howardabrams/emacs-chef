@@ -1,0 +1,112 @@
+#+TITLE:  Experiment Connecting to Chef
+#+AUTHOR: Howard Abrams
+#+EMAIL:  howard.abrams@gmail.com
+#+DATE:   2016 May 24
+
+* Goal
+
+  According to [[https://docs.chef.io/api_chef_server.html][this page]], talking to Chef is just a /simple/ HTTP call.
+  However, while most of the request is straight-forward, the request,
+  and some other information is encrypted using the PEM key.
+
+  #+BEGIN_SRC http
+    GET /organizations/NAME/nodes HTTP/1.1
+    Accept: application/json
+    Accept-Encoding: gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+    X-Ops-Sign: algorithm=sha1;version=1.0;
+    X-Ops-Userid: user_id
+    X-Ops-Timestamp: 2014-12-12T17:13:28Z
+    X-Ops-Content-Hash: 2jmj7l5rfasfgSw0ygaVb/vlWAghYkK/YBwk=
+    X-Ops-Authorization-1: BE3NnBritishaf3ifuwLSPCCYasdfXaRN5oZb4c6hbW0aefI
+    X-Ops-Authorization-2: sL4j1qtEZzi/2WeF67UuytdsdfgbOc5CjgECQwqrym9gCUON
+    X-Ops-Authorization-3: yf0p7PrLRCNasdfaHhQ2LWSea+kTcu0dkasdfvaTghfCDC57
+    X-Ops-Authorization-4: 155i+ZlthfasfasdffukusbIUGBKUYFjhbvcds3k0i0gqs+V
+    X-Ops-Authorization-5: /sLcR7JjQky7sdafIHNfsBQrISktNPower1236hbFIayFBx3
+    X-Ops-Authorization-6: nodilAGMb166@haC/fttwlWQ2N1LasdqqGomRedtyhSqXA==
+    Host: api.opscode.com:443
+    X-Ops-Server-API-Info: 1
+    X-Chef-Version: 12.0.2
+    User-Agent: Chef Knife/12.0.2 (ruby-2.1.1-p320; ohai-8.0.0; x86_64-darwin12.0.2; +http://chef.io)
+  #+END_SRC
+
+* Shell
+
+  On [[https://docs.chef.io/auth.html][this page]], we are given the following shell/curl/openssl version:
+
+  #+BEGIN_SRC sh :tangle chef-it.sh
+    _chef_dir () {
+        # Helper function:
+        # Recursive function that searches for chef configuration directory
+        # It looks upward from the cwd until it hits /.  If no directory is found,
+        # ~/.chef is chosen if it exists
+        # You could simply hard-code the path below
+
+        if [ "$PWD" = "/" ]; then
+            if [ -d ".chef" ]; then
+                echo "/.chef"
+            elif [ -d "$HOME/.chef" ]; then
+                echo "$HOME/.chef"
+            fi
+            return
+        fi
+
+        if [ -d '.chef' ];then
+            echo "${PWD}/.chef"
+        else
+            (cd ..; _chef_dir)
+        fi
+    }
+
+    _chomp () {
+        # helper function to remove newlines
+        awk '{printf "%s", $0}'
+    }
+
+    chef_api_request() {
+        # This is the meat-and-potatoes, or rice-and-vegetables, your preference really.
+
+        local method path body timestamp chef_server_url client_name hashed_body hashed_path
+        local canonical_request headers auth_headers
+
+        chef_server_url="https://api.opscode.com/organizations/my_org"
+        # '/organizations/ORG_NAME' is needed
+        if echo $chef_server_url | grep -q "/organizations/" ; then
+            endpoint=/organizations/${chef_server_url#*/organizations/}${2%%\?*}
+        else
+            endpoint=${2%%\?*}
+        fi
+        path=${chef_server_url}$2
+        client_name="chef_user"
+        method=$1
+        body=$3
+
+        hashed_path=$(echo -n "$endpoint" | openssl dgst -sha1 -binary | openssl enc -base64)
+        hashed_body=$(echo -n "$body" | openssl dgst -sha1 -binary | openssl enc -base64)
+        timestamp=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+
+        canonical_request="Method:$method\nHashed Path:$hashed_path\nX-Ops-Content-Hash:$hashed_body\nX-Ops-Timestamp:$timestamp\nX-Ops-UserId:$client_name"
+        headers="-H X-Ops-Timestamp:$timestamp \
+        -H X-Ops-Userid:$client_name \
+        -H X-Chef-Version:0.10.4 \
+        -H Accept:application/json \
+        -H X-Ops-Content-Hash:$hashed_body \
+        -H X-Ops-Sign:version=1.0"
+
+        auth_headers=$(printf "$canonical_request" | openssl rsautl -sign -inkey \
+                                                             "$(_chef_dir)/${client_name}.pem" | openssl enc -base64 | _chomp |  awk '{ll=int(length/60);i=0; \
+        while (i<=ll) {printf " -H X-Ops-Authorization-%s:%s", i+1, substr($0,i*60+1,60);i=i+1}}')
+
+        case $method in
+            GET)
+                curl_command="curl $headers $auth_headers $path"
+                $curl_command
+                ;;
+            ,*)
+                echo "Unknown Method. I only know: GET" >&2
+                return 1
+                ;;
+        esac
+    }
+
+    chef_api_request "$@"
+  #+END_SRC
