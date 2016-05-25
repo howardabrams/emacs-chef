@@ -26,6 +26,13 @@
                     "rsautl" "-sign" "-inkey" pemfile)
       (buffer-string))))
 
+(defun header-it (encrypted-string)
+  (-map-indexed (lambda (index line)
+                  (concat "X-Ops-Authorization-"
+                          (int-to-string (1+ index))
+                          ": " line))
+                (s-split "\n" encrypted-string)))
+
 (let* ((chef-server-url "http://10.98.68.204:4000")
        (endpoint "/clients")
        (path (concat chef-server-url endpoint))
@@ -42,4 +49,5 @@
                                         "X-Ops-Content-Hash"  hashed-body
                                         "X-Ops-Timestamp"  timestamp
                                         "X-Ops-UserId"  user-name))))
-  (base64-encode-string (openssl-it keypem canonical_request)))
+  (header-it
+   (base64-encode-string (openssl-it keypem canonical_request))))
