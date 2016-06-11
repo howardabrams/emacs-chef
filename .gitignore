@@ -1,2 +1,6 @@
 /.floo
 /.flooignore
+knife_admin_key.tar.gz
+/.chef/admin.pem
+/.chef/chef-validator.pem
+/.chef/knife.rb
